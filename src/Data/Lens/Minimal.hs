@@ -413,7 +413,7 @@ orElse o = Lens $ \upd -> case upd of
 exists :: MonadPlus m => Lens m (Maybe e) e
 exists = Lens $ \upd -> case upd of
   Nothing  -> get >>= maybe mzero return
-  Just upd -> get >>= maybe mzero (state . const . (id &&& Just))
+  Just upd -> get >>= maybe mzero (lift . upd >=> state . const . (id &&& Just))
 
 -- | This is a non-pure 'Lens' that requires the monadic type instantiate 'Control.Monad.MonadPlus'.
 -- This 'Lens' operates on a 'Data.Either.EIther' data structure. The 'Lens' will 'fetch' or

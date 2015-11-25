@@ -1,5 +1,5 @@
 name:     minilens
-version:  0.1.0.1
+version:  0.1.0.2
 synopsis: A minimalistic lens library, providing only the simplest, most basic lens functionality.
 description:         
     Lenses satisfy the properties of the Category type class, and are used
@@ -18,7 +18,7 @@ description:
     into it's own package in the hopes that it will be useful in a wider
     variety of projects.
 
-homepage:            https://github.com/RaminHAL9001/mini-lens
+homepage:            https://github.com/RaminHAL9001/minilens
 license:             GPL-3
 license-file:        LICENSE
 author:              Ramin Honary
