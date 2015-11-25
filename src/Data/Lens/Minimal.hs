@@ -1,11 +1,11 @@
--- "Data/Lens/Minimal.hs"  An minimalistic lens library.
+-- "Dao/Lens.hs"  An ultra-lightweight lens library.
 -- 
 -- Copyright (C) 2008-2015  Ramin Honary.
 --
--- "mini-lens" is free software: you can redistribute it and/or modify it under
--- the terms of the GNU General Public License as published by the Free
--- Software Foundation, either version 3 of the License, or (at your option)
--- any later version.
+-- Dao is free software: you can redistribute it and/or modify it under the
+-- terms of the GNU General Public License as published by the Free Software
+-- Foundation, either version 3 of the License, or (at your option) any later
+-- version.
 -- 
 -- Dao is distributed in the hope that it will be useful, but WITHOUT ANY
 -- WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
@@ -72,12 +72,13 @@
 -- 'fetch', 'update', and 'alter' functions. However what is called @fromGetSet@ in Job Varnish's
 -- Lens library, in this module this function is simply called 'newLens', and has a the monadic
 -- version 'newLensM'.
-module Data.Lens.Minimal where
+module Dao.Lens where
 
 import           Prelude hiding ((.), id)
 
+import           Dao.TestNull
+
 import           Control.Applicative
-import           Control.Arrow
 import           Control.Category
 import           Control.Concurrent.MVar
 import           Control.Monad
@@ -143,7 +144,7 @@ infixl 9 ~>
 --
 -- > Item 100 200
 with :: c -> [c -> c] -> c
-with c fx = foldl (>>>) id fx $ c
+with c fx = appEndo (getDual $ mconcat $ Dual . Endo <$> fx) c
 
 -- | This is the 'with' function with the parameters 'Prelude.flip'ped. It is convenient when used
 -- with 'Control.Monad.State.Class.modify' when you want to update the state of a
@@ -155,7 +156,7 @@ with c fx = foldl (>>>) id fx $ c
 by :: [c -> c] -> c -> c
 by = flip with
 
--- | Like 'with' but passes 'Data.Monoid.mempty' as the first parameter, so instead of writing
+-- | Like 'with' but passes 'Dao.TestNull.nullValue' as the first parameter, so instead of writing
 -- something like:
 --
 -- @
@@ -167,8 +168,8 @@ by = flip with
 -- @
 -- new [foo 'Dao.Lens.<~' 0, bar 'Dao.Lens.<~' 1]
 -- @
-new :: Monoid c => [c -> c] -> c
-new = with mempty
+new :: TestNull c => [c -> c] -> c
+new = with nullValue
 
 -- | This is a function intended to be used with the 'with' function. It is used for constructing a
 -- simple updating 'Data.Monoid.Endo'functor (updating function) that simply stores the element @e@
@@ -198,9 +199,9 @@ infixr 0 <~
 -- This function requires a 'PureLens', but of course any 'Lens' polymorphic over the monadic type
 -- @m@ can be used.
 --
--- This operator is superficially similar to updating operators in popular C/C++ family of
--- programming languages. In this languages, to do an in-place update on a variable "x", for example
--- to increment an integer "x" by 5, you would write:
+-- This operator is visually similar to updating operators in popular C/C++ family of programming
+-- languages. In this languages, to do an in-place update on a variable "x", for example to
+-- increment an integer "x" by 5, you would write:
 --
 -- > x += 5;
 --
@@ -229,18 +230,10 @@ infixr 0 $=
 newtype Lens m c e =
   Lens
   { lensStateT :: Maybe (e -> m e) -> StateT c m e 
-    -- ^ Lenses perform two possible functions: lookups and updates. If a lens is to be used as an
-    -- updating lens, the updating function will be wrapped in the 'Prelude.Just' constructor and
-    -- passed to this function. If a lens is to be used as a lookup lens, 'Prelude.Nothing' is
-    -- passed to this function.
-    --
-    -- On receiving 'Prelude.Nothing', this function must return the expected value stored within a
-    -- container. For example, a 'Lens' called 'tuple1', which operates on a container type @c@
-    -- where @c@ is a tuple, is expected return the first element of the tuple.
-    --
-    -- On receiving an updater function wrapped in 'Prelude.Just', this function lookup the expected
-    -- value in the container, pass the value to the given updater function, and then store the
-    -- updated value back into the container.
+    -- ^ This function takes an element @e@ wrapped in a 'Prelude.Maybe'. If this function is passed
+    -- an element @e@ contained in a 'Prelude.Just' constructor, the container should be updated
+    -- with this element @e@. If this function is passed 'Prelude.Nothing', a value of type element
+    -- @e@ should be retrieved from the container @c@ and returned.
     --
     -- As a law, passing a non-'Prelude.Nothing' argument should not modify container @c@ at all,
     -- although it is conceivable that, if your container includes something like a "number of times
@@ -386,54 +379,32 @@ liftLens (Lens lens) = Lens $ \element -> case element of
 
 ----------------------------------------------------------------------------------------------------
 
--- | The 'defaul' 'Lens' operates on the element of a 'Data.Maybe.Maybe' data type given a default
--- value if the structure contains 'Data.Maybe.Nothing'. The structure will not be updated if it is
--- 'Data.Maybe.Nothing', so it will not 'Data.Map.alter' a 'Data.Map.Map' data structure unless the
--- key being updated already exists. This function is not called @default@ because @default@ is a
--- reserved word in Haskell.
-defaul :: Monad m => m e -> Lens m (Maybe e) e
-defaul o = Lens $ \upd -> case upd of
-  Nothing  -> get >>= maybe (lift o) return
-  Just upd -> get >>= maybe (lift $ o >>= upd) (lift . upd >=> state . const . (id &&& Just))
-
--- | The 'orElse' lens operates on the element of a 'Data.Maybe.Maybe' data type given a default
--- value if the structure contains 'Data.Maybe.Nothing'. The structure will be changed to the
--- updated default value if it is 'Data.Maybe.Nothing'. So if this function is used to
--- 'Data.Map.alter' a 'Data.Map.Map' data structure where no element is associated with a given key,
--- this function will force the value to exist and be associated with the given key.
-orElse :: Monad m => m e -> Lens m (Maybe e) e
-orElse o = Lens $ \upd -> case upd of
-  Nothing  -> get >>= maybe (lift o) return
-  Just upd -> get >>= maybe (lift $ o >>= upd) return >>= state . const . (id &&& Just)
-
--- | This is a non-pure 'Lens' that requires the mondic type instantiate 'Control.Monad.MonadPlus'.
--- This 'Lens' operates on a 'Data.Maybe.Maybe' data structure. The 'Lens' will 'fetch' or 'update'
--- a value if and only if the data structure is 'Data.Maybe.Just'. If it is 'Data.Maybe.Nothing'
--- the 'Lens' will evaluate to 'Control.Monad.mzero'.
-exists :: MonadPlus m => Lens m (Maybe e) e
-exists = Lens $ \upd -> case upd of
-  Nothing  -> get >>= maybe mzero return
-  Just upd -> get >>= maybe mzero (state . const . (id &&& Just))
-
--- | This is a non-pure 'Lens' that requires the monadic type instantiate 'Control.Monad.MonadPlus'.
--- This 'Lens' operates on a 'Data.Either.EIther' data structure. The 'Lens' will 'fetch' or
--- 'update' a value if and only if the data structure is 'Data.Either.Left', otherwise the 'Lens'
--- evaluates to 'Control.Monad.mzero'.
-leftLens :: MonadPlus m => Lens m (Either e anything) e
-leftLens = Lens $ \upd -> case upd of
-  Nothing  -> get >>= lift . (return ||| const mzero)
-  Just upd -> get >>= lift . (upd ||| const mzero) >>= state . const . (id &&& Left)
-
--- | This is a non-pure 'Lens' that requires the monadic type instantiate 'Control.Monad.MonadPlus'.
--- This 'Lens' operates on a 'Data.Either.Either' data structure. The 'Lens' will 'fetch' or
--- 'update' a value if and only if the data structure is 'Data.Either.Left', otherwise the 'Lens'
--- evaluates to 'Control.Monad.mzero'.
-rightLens :: MonadPlus m => Lens m (Either anything e) e
-rightLens = Lens $ \upd -> case upd of
-  Nothing  -> get >>= lift . (const mzero ||| return)
-  Just upd -> get >>= lift . (const mzero ||| upd) >>= state . const . (id &&& Right)
-
-----------------------------------------------------------------------------------------------------
+-- | Creates a lens that operates on a type stored in a 'Prelude.Maybe' data type. When 'fetch'ing a
+-- data type, the first boolean parameter is ignored, the second function should return a default
+-- value to be used when 'fetch'ing from a 'Prelude.Nothing' data type:
+--
+-- @
+-- 'fetch' ('maybeLens' 'Prelude.False' $ return "") 'Prelude.Nothing'      -- ""
+-- 'fetch' ('maybeLens' 'Prelude.False' $ return "") ('Prelude.Just' "red") -- "red"
+-- 'fetch' ('maybeLens' 'Prelude.True'  $ return "") 'Prelude.Nothing'      -- ""
+-- 'fetch' ('maybeLens' 'Prelude.True'  $ return "") ('Prelude.Just' "red") -- "red"
+-- @
+--
+-- The boolean parameter determines the behavior of the lens when 'update'ing a value: if
+-- 'Prelude.True', it will force the container to become 'Prelude.Just' regardless what the previous
+-- value was, but if 'Prelude.False' it will only set the 'update'ed value if the container is
+-- 'Prelude.Just', otherwise it stays 'Nothing' and the default 'update'ed value is returned.
+--
+-- @
+-- 'update' ('maybeLens' 'Prelude.False' $ return "") 'Prelude.Nothing'      "blue" -- Nothing
+-- 'update' ('maybeLens' 'Prelude.False' $ return "") ('Prelude.Just' "red") "blue" -- Just "blue"
+-- 'update' ('maybeLens' 'Prelude.True'  $ return "") 'Prelude.Nothing'      "blue" -- Just "blue"
+-- 'update' ('maybeLens' 'Prelude.True'  $ return "") ('Prelude.Just' "red") "blue" -- Just "blue"
+-- @
+--
+maybeLens :: Monad m => Bool -> m e -> Lens m (Maybe e) e
+maybeLens force deflt = newLensM (maybe deflt return) $ \o ->
+  return . if force then const (Just o) else fmap (const o)
 
 -- | To create a 'Lens' that focuses on an element of a dictionary, provide a lookup function (e.g.
 -- 'Data.Map.lookup') and an alter function (e.g. 'Data.Map.alter'). Or just use the 'mapLens' or
