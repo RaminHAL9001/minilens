@@ -6,15 +6,6 @@
 -- the terms of the GNU General Public License as published by the Free
 -- Software Foundation, either version 3 of the License, or (at your option)
 -- any later version.
--- 
--- Dao is distributed in the hope that it will be useful, but WITHOUT ANY
--- WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
--- FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
--- details.
--- 
--- You should have received a copy of the GNU General Public License along with
--- this program (see the file called "LICENSE"). If not, see the URL:
--- <http://www.gnu.org/licenses/agpl.html>.
 
 -- | This module defines a very simple 'Lens' data type inspired by Job Varnish's "lenses" package.
 --
@@ -27,34 +18,34 @@
 --     dat{ record1 = newValue1, record2 = newValue2 }
 -- @
 --
--- With Dao 'Lens'es, it is possible to achieve the same thing with the following expression:
+-- With Minimal 'Lens'es, it is possible to achieve the same thing with the following expression:
 --
 -- @
--- let previousValue = dat 'Dao.Lens.~>' recordName in
---     'with' dat [ record1 'Dao.Lens.<~' newValue1, record2 'Dao.Lens.<~' newValue2 ]
+-- let previousValue = dat 'Data.Lens.Minimal.Lens.~>' recordName in
+--     'with' dat [ record1 'Data.Lens.Minimal.Lens.<~' newValue1, record2 'Data.Lens.Minimal.Lens.<~' newValue2 ]
 -- @
 --
--- Dao 'Lens'es can be composed with the 'Control.Category.Category' operators @(.)@,
+-- Minimal 'Lens'es can be composed with the 'Control.Category.Category' operators @(.)@,
 -- @('Control.Category.<<<')@ and @('Control.Category.>>>')@ so something like this:
 --
 -- @
--- return $ dat{ record = (\dat' -> dat'{ subRecord = newValue }) (record dat) }
+-- return $ dat{ record = (\\dat' -> dat'{ subRecord = newValue }) (record dat) }
 -- @
 --
 -- can be simplified to this:
 --
 -- @
--- return $ 'with' dat [ record 'Control.Category.>>>' subRecord 'Dao.Lens.<~' newValue ]
+-- return $ 'with' dat [ record 'Control.Category.>>>' subRecord 'Data.Lens.Minimal.Lens.<~' newValue ]
 -- @
 --
 -- or equivalently with the dot operator, which is identical to @('Control.Category.>>>')@ with the
 -- arguments flipped:
 --
 -- @
--- return $ 'with' dat [ subRecord . record 'Dao.Lens.<~' newValue ]
+-- return $ 'with' dat [ subRecord . record 'Data.Lens.Minimal.Lens.<~' newValue ]
 -- @
 --
--- Fetching values is done with @('Dao.Lens.~>')@, which is a left-handed infix operator of
+-- Fetching values is done with @('Data.Lens.Minimal.Lens.~>')@, which is a left-handed infix operator of
 -- precedence 1 so that you can compose 'Lens'es for fetching. The above example with @record@ and
 -- @subRecord@ could be fetched like so:
 --
@@ -260,13 +251,13 @@ by = flip with
 -- something like:
 --
 -- @
--- 'with' 'Data.Monoid.mempty' [foo 'Dao.Lens.<~' 0, bar 'Dao.Lens.<~' 1]
+-- 'with' 'Data.Monoid.mempty' [foo 'Data.Lens.Minimal.Lens.<~' 0, bar 'Data.Lens.Minimal.Lens.<~' 1]
 -- @
 -- 
 -- All you have to write is:
 --
 -- @
--- new [foo 'Dao.Lens.<~' 0, bar 'Dao.Lens.<~' 1]
+-- new [foo 'Data.Lens.Minimal.Lens.<~' 0, bar 'Data.Lens.Minimal.Lens.<~' 1]
 -- @
 new :: Monoid c => [c -> c] -> c
 new = with mempty
@@ -286,7 +277,7 @@ new = with mempty
 -- value you want to write is on the right.
 --
 -- @
--- 'with' myData [fieldInData 'Dao.Lens.<~' 0]
+-- 'with' myData [fieldInData 'Data.Lens.Minimal.Lens.<~' 0]
 -- @
 (<~) :: PureLens c e -> e -> c -> c
 (<~) = pureUpdate
@@ -309,7 +300,7 @@ infixr 0 <~
 -- right-hand side of this operator that will perform the update:
 --
 -- @
--- 'with' myData [x 'Dao.Lens.$=' (+ 5)]
+-- 'with' myData [x 'Data.Lens.Minimal.Lens.$=' (+ 5)]
 -- @
 ($=) :: PureLens c e -> (e -> e) -> c -> c
 ($=) lens f c = snd (pureAlter lens f c)
@@ -374,7 +365,7 @@ lensGet lens = get >>= fetch lens
 -- 'lensPut' function is defined as:
 --
 -- @
--- (\lens elem -> 'Control.Monad.State.Class.get' >>= 'update' lens elem >>= \e -> 'Control.Monad.State.Class.put' e >> return e)
+-- (\\lens elem -> 'Control.Monad.State.Class.get' >>= 'update' lens elem >>= \\e -> 'Control.Monad.State.Class.put' e >> return e)
 -- @
 lensPut :: (Monad m, MonadState c m) => Lens m c e -> e -> m e
 lensPut lens e = get >>= update lens e >>= \c -> put c >> return e
@@ -427,10 +418,10 @@ lensModify lens f = get >>= alter lens f >>= \ (e, c) -> put c >> return (e, c)
 -- data Container = Container ('Prelude.Maybe' 'Prelude.Int') ('Prelude.Maybe' 'Prelude.String')
 -- 
 -- maybeInt :: 'Prelude.Monad' m => 'Lens' m Container ('Prelude.Maybe' 'Prelude.Int')
--- maybeInt = 'newLens' (\ (Container i _) -> i) (\i (Container _ s) -> Container i s)
+  -- maybeInt = 'newLens' (\\ (Container i _) -> i) (\\i (Container _ s) -> Container i s)
 -- 
 -- maybeString :: 'Prelude.Monad' m => 'Lens' m Container ('Prelude.Maybe' 'Prelude.String')
--- maybeString = 'newLens' (\ (Container _ s) -> s) (\s (Container i _) -> Container i s)
+-- maybeString = 'newLens' (\\ (Container _ s) -> s) (\\s (Container i _) -> Container i s)
 -- 
 -- required :: 'Prelude.Monad' m => 'Prelude.String' -> 'Lens' m Container (Maybe element) -> 'Lens' ('Control.Monad.Except.ExceptT' 'Prelude.String' m) Container element
 -- required fieldName lens = 'liftLens' lens 'Control.Category.>>>'
@@ -528,7 +519,7 @@ instance Monad m => FocusesWith Int m (I.IntMap o) (Maybe o) where { focus=intMa
 ----------------------------------------------------------------------------------------------------
 
 -- | Create a lens that accesses an element at the given index in an array. Evaluates to
--- 'Prelude.undefined' if the index is out of bounds.
+-- 'Prelude.undefined' if the index is out of bounds. This function is used to instantiate 'focus'.
 arrayLens :: (Monad m, Ix i, IArray arr o) => i -> Lens m (arr i o) o
 arrayLens i = newLens (! i) (\o -> (// [(i, o)]))
 
@@ -538,7 +529,7 @@ instance (Monad m, Ix i, IArray UArray o) => FocusesWith i m (UArray i o) o wher
 
 -- | Create a lens that accesses an element at the given index in an array. If the index is out of
 -- bounds, calling 'fetch' on the 'Lens' will evaluate to 'Prelude.Nothing', and calling 'fetch'
--- will do nothing at all.
+-- will do nothing at all. This function is used to instantiate 'focus'.
 maybeArrayLens :: (Monad m, Ix i, IArray arr o) => i -> Lens m (arr i o) (Maybe o)
 maybeArrayLens i = let lens = arrayLens i in Lens $ \o -> get >>= \arr ->
   if inRange (bounds arr) i
@@ -564,7 +555,7 @@ instance (Monad m, Applicative m, MonadIO m, Ix i, MArray IOUArray o IO) =>
   FocusesWith i m (IOUArray i o) o where { focus=ioArrayLens; }
 
 -- | Checks if the index is within the bounds of the array, does no lookup or update if the index is
--- out of bounds.
+-- out of bounds. This function is used to instantiate 'focus'.
 ioMaybeArrayLens :: (Monad m, MonadIO m, Ix i, MArray arr o IO) => i -> Lens m (arr i o) (Maybe o)
 ioMaybeArrayLens i = let lens = ioArrayLens i in Lens $ \o -> do
   arr      <- get
