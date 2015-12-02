@@ -1,5 +1,5 @@
 name:     minilens
-version:  0.1.0.2
+version:  0.1.1.0
 synopsis: A minimalistic lens library, providing only the simplest, most basic lens functionality.
 description:         
     Lenses satisfy the properties of the Category type class, and are used

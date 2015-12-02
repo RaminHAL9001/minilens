@@ -93,127 +93,6 @@ import           Data.IORef
 import qualified Data.Map    as M
 import           Data.Monoid
 
--- | This is defined as @('Prelude.flip' 'pureFetch')@ a left-associative infix operator of
--- precedence 8. On the right of this infix operator is the data from which you want to fetch, on
--- the right is a 'Lens' used to retrieve the data from within it.  For example, say you have a
--- large, complicated data type @complicated@ which contains a @Foo@ accessibly by the 'Lens' @foo@,
--- and @Foo@ contains a @Bar@ accessible by the 'Lens' @bar@, and all you want to do is get the
--- value @Bar@ from @complicated@. To do that you simply write:
---
--- It looks and behaves similar to the C/C++ programming language operator @->@.
---
--- @
--- complicated 'Dao.Lens.~>' foo 'Dao.Lens.~>' bar
--- @
---
--- This function requires a 'PureLens', but of course any 'Lens' polymorphic over the monadic type
--- @m@ can be used.
-(~>) :: c -> PureLens c e -> e
-(~>) = flip pureFetch
-infixl 9 ~>
-
--- | Apply a sequence of 'Data.Monoid.Endo'functors (updating functions) to a container @c@. The
--- 'Data.Monoid.Endo'functors are applied in the order they appear in the list from left-to-right.
---
--- In category theory jargon, the 'Data.Monoid.mconcat'enation of the 'Data.Monoid.Dual' of each
--- 'Data.Monoid.Endo'functor in the list @[c -> c]@ is applied to the container @c@.
---
--- This function is useful for applying a series of updates on a container @c@, where each update is
--- constructed as pure 'Lens' function with the '($=)' or '($$)' operators.
---
--- @
--- data Item = Item Int Int deriving Show
---
--- foo :: 'Control.Monad.Monad' m => 'Lens' m Item Int
--- foo = 'newLens' (\\ (Item foo _) -> foo) (\\foo (Item _ bar) -> Item foo bar)
---
--- bar :: 'Control.Monad.Monad' m => 'Lens' m Item Int
--- bar = 'newLens' (\\ (Item _ bar) -> bar) (\\bar (Item foo _) -> Item foo bar)
---
--- theItem :: Item
--- theItem = Item 0 0
---
--- -- Now lets try this 'with' function with theItem...
--- main :: IO ()
--- main = 'System.IO.print' $
---     'with' theItem [foo 'Dao.Lens.$=' 25, bar 'Dao.Lens.$=' 200, foo 'Dao.Lens.$$' (* 4)]
--- @
---
--- The output of the above program will be:
---
--- > Item 100 200
-with :: c -> [c -> c] -> c
-with c fx = foldl (>>>) id fx $ c
-
--- | This is the 'with' function with the parameters 'Prelude.flip'ped. It is convenient when used
--- with 'Control.Monad.State.Class.modify' when you want to update the state of a
--- 'Control.Monad.State.Lazy.StateT' monad using a lens:
---
--- @
--- 'Control.Monad.State.Class.modify' $ 'by' [lensA 'Dao.Lens.<~' newValue, lensB 'Dao.Lens.$=' (+ 1)]
--- @
-by :: [c -> c] -> c -> c
-by = flip with
-
--- | Like 'with' but passes 'Data.Monoid.mempty' as the first parameter, so instead of writing
--- something like:
---
--- @
--- 'with' nullValue [foo 'Dao.Lens.<~' 0, bar 'Dao.Lens.<~' 1]
--- @
--- 
--- All you have to write is:
---
--- @
--- new [foo 'Dao.Lens.<~' 0, bar 'Dao.Lens.<~' 1]
--- @
-new :: Monoid c => [c -> c] -> c
-new = with mempty
-
--- | This is a function intended to be used with the 'with' function. It is used for constructing a
--- simple updating 'Data.Monoid.Endo'functor (updating function) that simply stores the element @e@
--- into a container @c@ using 'pureUpdate'. You would use this operator when building a list of
--- updates to pass to the 'with' function.
---
--- This function requires a 'PureLens', but of course any 'Lens' polymorphic over the monadic type
--- @m@ can be used.
---
--- This operator is visually similar to the bind operator used in Haskell's "do" notation @(<-)@.
--- Visually, it looks like you are writing a value into a lens, like in a procedural programming
--- language where the field you want to modify is on the left of the assignment operator, and the
--- value you want to write is on the right.
---
--- @
--- 'with' myData [fieldInData 'Dao.Lens.<~' 0]
--- @
-(<~) :: PureLens c e -> e -> c -> c
-(<~) = pureUpdate
-infixr 0 <~
-
--- | This is a function intended to be used with the 'with' function. It is used for constructing a
--- simple updating 'Data.Monoid.Endo'functor (updating function) that updates element @e@ inside of
--- a container @c@ using 'pureAlter'. You would use this operator when building a list of updates to
--- pass to the 'with' function.
---
--- This function requires a 'PureLens', but of course any 'Lens' polymorphic over the monadic type
--- @m@ can be used.
---
--- This operator is superficially similar to updating operators in popular C/C++ family of
--- programming languages. In this languages, to do an in-place update on a variable "x", for example
--- to increment an integer "x" by 5, you would write:
---
--- > x += 5;
---
--- Likewise this operator does an "in-place update." However you must provide a function on the
--- right-hand side of this operator that will perform the update:
---
--- @
--- 'with' myData [x 'Dao.Lens.$=' (+ 5)]
--- @
-($=) :: PureLens c e -> (e -> e) -> c -> c
-($=) lens f c = snd (pureAlter lens f c)
-infixr 0 $=
-
 ----------------------------------------------------------------------------------------------------
 
 -- | A 'Lens' is a 'Control.Monad.State.StateT' monadic function that 'Control.Monad.Trans.lift's a
@@ -248,9 +127,9 @@ newtype Lens m c e =
     -- warned that this is very bad programming practice.
   }
 
--- | This is a 'Lens' where the monad must be 'Control.Monad.Identity'. The advantage of using this
--- over 'Lens' (apart from the fact that it is easier to write it's type in your code) is that it
--- guarantees access to your container must be pure, with no IO.
+-- | This is a 'Lens' where the monad must be 'Control.Monad.Identity.Identity'. The advantage of
+-- using this over 'Lens' (apart from the fact that it is easier to write it's type in your code) is
+-- that it guarantees access to your container must be pure, with no IO.
 type PureLens c e = Lens Identity c e
 
 instance Monad m => Category (Lens m) where
@@ -263,12 +142,6 @@ instance Monad m => Category (Lens m) where
       (_, a) <- runStateT (ab $ Just (return . const b)) a -- update updated b into a
       return (c, a)
 
--- | This class lets you define a way to focus a 'Lens', which means to create a lens that operates
--- on an element at a specific index of the container @c@. 'FocusesWith' data types of course must be
--- containers with indexable elements, like arrays or maps.
-class Monad m => FocusesWith index m c e where
-  focus :: index -> Lens m c e
-
 -- | This function allows you to construct a new 'Lens' without using a
 -- 'Control.Monad.State.Lazy.StateT' transformer. Instead provide two functions, a function that
 -- 'fetch's an element @e@ from the container @c@, and a function that 'update's an element @e@ into
@@ -278,41 +151,240 @@ newLensM fetch update = Lens $ maybe (get >>= lift . fetch) $ \upd ->
   get >>= \st -> lift (fetch st >>= upd) >>= \o -> lift (update o st) >>= put >> return o
 
 -- | This function is similar to 'newLensM', but the two parameter functions are pure functions.
--- *NOTE:* that the 'Lens' constructed by this function can be used as both a normal 'Lens' or a
+-- *NOTE:* that the 'Lens' constructed by this function can be used as both a monadic 'Lens' or a
 -- 'PureLens', only the 'fetch' and 'update' parameters are pure.
 newLens :: Monad m => (c -> e) -> (e -> c -> c) -> Lens m c e
 newLens fetch update = newLensM (return . fetch) (\o -> return . update o)
 
--- | It will convert a 'Lens' to a 'Control.Monad.State.Lazy.StateT' monad transformer that returns
--- the element @e@ of the container @c@.
+----------------------------------------------------------------------------------------------------
+
+-- | This is defined as @('Prelude.flip' 'pureFetch')@ a left-associative infix operator of
+-- precedence 8. On the right of this infix operator is the data from which you want to fetch, on
+-- the right is a 'Lens' used to retrieve the data from within it. For example, the expression:
+--
+-- @
+-- someContainer 'Data.Lens.Minilens.~>' getElem
+-- @
+--
+-- will use a lens called @getElem@ to fetch an element from the data structure called
+-- @someContainer@.
+--
+-- It looks and behaves similar to the C/C++ programming language operator @->@. It is left
+-- associative so the expression @a~>b~>c~>d@ is the same as @((a ~> b) ~> c) ~> d@, which means you
+-- can use this operator to compose 'Lens'es to retrieve elements at arbitrary depth.
+--
+-- This function requires a 'PureLens', but of course any 'Lens' polymorphic over the monadic type
+-- @m@ can be used, automatic type inference will choose to make use of
+-- 'Data.Monad.Identity.Identity' if the type is polymorphic.
+(~>) :: c -> PureLens c e -> e
+(~>) = flip pureFetch
+infixl 9 ~>
+
+-- | The 'Data.Lens.Minilens.~>' operator uses a 'Lens' to fetch an element from a container. Often
+-- times, it is useful to use the 'Lens' alone using Haskell's infix operator section syntax:
+--
+-- @
+-- getter :: Container -> Element
+-- getter container = container'Data.Lens.Minilens.~>'lensToGetElem
+-- -- This can be abreviated to:
+--
+-- getter :: Container -> Element
+-- getter = (~> lensToGetElem)
+-- @
+--
+-- It is often useful to use a @getter@ that we see above with 'Data.Functor.Functor's '
+-- 'Data.Functor.fmap' infix operator: @('Data.Functor.<$>')@. For example:
+--
+-- @
+-- fmapper :: [Container] -> [Element]
+-- fmapper list = (~> lensToGetElem) 'Data.Functor.<$>' list
+-- @
+--
+-- This pattern is used so often that it warrants it's own operator. The 'Data.Lens.Minimal.<$~>'
+-- operator uses @('Data.Lens.Minimal.~>)'@ applies a lens to the element of a
+-- 'Data.Functor.Functor' using 'Data.Functor.<$>'. So the above @fmapper@ could be written as:
+--
+-- @
+-- fmapper :: [Container] -> [Element]
+-- fmapper list = listToGetElem 'Data.Lens.Minimal.<$~>' list
+-- @
+--
+-- which can be further abbreviated to:
+--
+-- @
+-- fmapper :: [Container] -> [Element]
+-- fmapper = (listToGetElem 'Data.Lens.Minimal.<$~>')
+-- @
+(<$~>) :: Functor f => PureLens c e -> f c -> f e
+(<$~>) lens f = (~> lens) <$> f
+
+-- | Use a list of updating functions to change elements in a container @c@. The list elements are
+-- of type @(c -> c)@, which are usually constructed using 'Lens' operators like
+-- @('Data.Lens.Minimal.<~')@ or @('Data.Lens.Minimal.$=')@. For example:
+--
+-- @
+-- moveSoutheast :: Gameboard -> Gameboard
+-- moveSoutheast gameboard = 'with' gameboard
+--     [ player 'Control.Category.>>>' position 'Control.Category.>>>' northCoord 'Data.Lens.Minimal.$=' 'Prelude.subtract' 1
+--     , player 'Control.Category.>>>' position 'Control.Category.>>>' eastCoord 'Data.Lens.Minimal.$=' (+ 1)
+--     , player 'Control.Category.>>>' isMyTurn 'Data.Lens.Minimal.<~' False
+--     ]
+-- @
+--
+-- However any updating function may be used, not just ones constructed from 'Lens' operators.
+--
+-- In category theory jargon, 'with' applies a sequence of 'Data.Monoid.Endo'functors (updating
+-- functions) to a container @c@. The 'Data.Monoid.Endo'functors are applied in the order they
+-- appear in the list from left-to-right. The 'Data.Monoid.mconcat'enation of the 'Data.Monoid.Dual'
+-- of each 'Data.Monoid.Endo'functor in the list @[c -> c]@ is applied to the container @c@.
+with :: c -> [c -> c] -> c
+with c fx = foldl (>>>) id fx $ c
+
+-- | This is the 'with' function with the parameters 'Prelude.flip'ped. It is convenient when used
+-- with 'Control.Monad.State.Class.modify' when you want to update the state of a
+-- 'Control.Monad.State.Lazy.StateT' monad using a 'Lens'. So take the example given in the 'with'
+-- section above, the function could be written as:
+--
+-- @
+-- moveSoutheast :: Gameboard -> Gameboard
+-- moveSoutheast = 'by'
+--     [ player 'Control.Category.>>>' position 'Control.Category.>>>' northCoord 'Data.Lens.Minimal.$=' 'Prelude.subtract' 1
+--     , player 'Control.Category.>>>' position 'Control.Category.>>>' eastCoord 'Data.Lens.Minimal.$=' (+ 1)
+--     , player 'Control.Category.>>>' isMyTurn 'Data.Lens.Minimal.<~' False
+--     ]
+-- @
+by :: [c -> c] -> c -> c
+by = flip with
+
+-- | Like 'with' but passes 'Data.Monoid.mempty' as the first parameter, so instead of writing
+-- something like:
+--
+-- @
+-- 'with' 'Data.Monoid.mempty' [foo 'Dao.Lens.<~' 0, bar 'Dao.Lens.<~' 1]
+-- @
+-- 
+-- All you have to write is:
+--
+-- @
+-- new [foo 'Dao.Lens.<~' 0, bar 'Dao.Lens.<~' 1]
+-- @
+new :: Monoid c => [c -> c] -> c
+new = with mempty
+
+-- | This is a function intended to be used with the 'with' function. It is used for constructing a
+-- simple updating 'Data.Monoid.Endo'functor (updating function) that simply stores the element @e@
+-- into a container @c@ using 'pureUpdate'. You would use this operator when building a list of
+-- updates to pass to the 'with' function.
+--
+-- This function requires a 'PureLens', but of course any 'Lens' polymorphic over the monadic type
+-- @m@ can be used, automatic type inference will choose to make use of
+-- 'Data.Monad.Identity.Identity' if the type is polymorphic.
+--
+-- This operator is visually similar to the bind operator used in Haskell's "do" notation @(<-)@.
+-- Visually, it looks like you are writing a value into a lens, like in a procedural programming
+-- language where the field you want to modify is on the left of the assignment operator, and the
+-- value you want to write is on the right.
+--
+-- @
+-- 'with' myData [fieldInData 'Dao.Lens.<~' 0]
+-- @
+(<~) :: PureLens c e -> e -> c -> c
+(<~) = pureUpdate
+infixr 0 <~
+
+-- | This is a function intended to be used with the 'with', 'by', or 'new' functions. It is used
+-- for constructing a simple updating 'Data.Monoid.Endo'functor (updating function) that updates
+-- element @e@ inside of a container @c@ using 'pureAlter'. You would use this operator when
+-- building a list of updates to pass to the 'with' function.
+--
+-- This function requires a 'PureLens', but of course any 'Lens' polymorphic over the monadic type
+-- @m@ can be used, automatic type inference will choose to make use of
+-- 'Data.Monad.Identity.Identity' if the type is polymorphic.
+--
+-- This operator is superficially similar to updating operators in popular C/C++ family of
+-- programming languages. In this languages, to do an in-place update on a variable "x", for example
+-- to increment an integer "x" by 5, you would write: @myData->x += 5;@
+--
+-- Likewise this operator does an "in-place update." However you must provide a function on the
+-- right-hand side of this operator that will perform the update:
+--
+-- @
+-- 'with' myData [x 'Dao.Lens.$=' (+ 5)]
+-- @
+($=) :: PureLens c e -> (e -> e) -> c -> c
+($=) lens f c = snd (pureAlter lens f c)
+infixr 0 $=
+
+----------------------------------------------------------------------------------------------------
+
+-- | This class lets you define a way to focus a 'Lens'. A 'focus' takes a single index parameter
+-- @i@ and can 'fetch' or 'update' an element @e@ within container @c@ at that index @i@.
+class Monad m => FocusesWith i m c e where
+  focus :: i -> Lens m c e
+
+-- | Converts a 'Lens' to a 'Control.Monad.State.Lazy.StateT' monad transformer that returns the
+-- element @e@ of the container @c@.
 getWithLens :: Monad m => Lens m c e -> StateT c m e
 getWithLens (Lens lens) = lens Nothing
 
--- | It will convert a 'Lens' to a 'Control.Monad.State.Lazy.StateT' monad transformer that inserts
--- an element @e@ into the container @c@.
+-- | Converts a 'Lens' to a 'Control.Monad.State.Lazy.StateT' monad transformer that inserts an
+-- element @e@ into the container @c@.
 putWithLens :: Monad m => Lens m c e -> (e -> StateT c m e)
 putWithLens (Lens lens) = lens . Just . const . return
 
--- | It will convert a 'Lens' to a 'Control.Monad.State.Lazy.StateT' monad transformer that modifies
--- the element @e@ within the container.
+-- | Converts a 'Lens' to a 'Control.Monad.State.Lazy.StateT' monad transformer that modifies the
+-- element @e@ within the container.
 modifyWithLens :: Monad m => Lens m c e -> ((e -> m e) -> StateT c m e)
 modifyWithLens (Lens lens) = lens . Just
 
--- | Use a 'Lens' to read an element @e@ within a container @c@.
+-- | Use a 'Lens' to read an element @e@ within a container @c@. This function is usually used in
+-- @do@ notation:
+--
+-- @
+-- func container1 container2 = do
+--     elem <- container1 `fetch` a 'Control.Category.>>>' b 'Control.Category.>>>' c 'Control.Category.>>>' d;
+--     foo  <- container2 `fetch` bar 'Control.Category.>>>' baz
+--     combineAndReturn elem foo
+-- @
 fetch :: Monad m => Lens m c e -> c -> m e
 fetch (Lens lens) = evalStateT (lens Nothing)
 
--- | Similar to 'fetch', but performs the lookup purely, without Monadic side-effects.
+-- | Similar to 'fetch', but performs the lookup purely, without Monadic side-effects. It is usually
+-- easier to use the infix operator version of this function: @('Data.Lens.Minimal.~>')@.
 pureFetch :: PureLens c e -> c -> e
 pureFetch lens = runIdentity . fetch lens
 
--- | Defined as @(\lens -> 'Control.Monad.State.Class.get' >>= 'fetch' lens)@
+-- | Defined as @(\\lens -> 'Control.Monad.State.Class.get' >>= 'fetch' lens)@. Although instead of
+-- this function, it is usually easier to simply write:
+--
+-- @
+-- 'Control.Monad.State.Class.get' >>= 'fetch' lens
+-- @
+--
+-- or if your lens can be used as a 'PureLens':
+--
+-- @
+-- 'Control.Monad.State.Class.gets' ('Data.Lens.Minimal.~>' lens)
+-- @
 lensGet :: (Monad m, MonadState c m) => Lens m c e -> m e
 lensGet lens = get >>= fetch lens
 
--- | Use a 'Lens' to write an element @e@ within a container @c@.
+-- | Use a 'Lens' that can access the 'Control.Monad.State.state' within a
+-- 'Control.Monad.State.Class.MonadState' function to update the 'Control.Monad.State.state'. The
+-- 'lensPut' function is defined as:
 --
--- Notice that the type signature of this function is defined such that multiple 'alter' functions
+-- @
+-- (\lens elem -> 'Control.Monad.State.Class.get' >>= 'update' lens elem >>= \e -> 'Control.Monad.State.Class.put' e >> return e)
+-- @
+lensPut :: (Monad m, MonadState c m) => Lens m c e -> e -> m e
+lensPut lens e = get >>= update lens e >>= \c -> put c >> return e
+
+-- | Use a 'Lens' to write an element @e@ within a container @c@. The pure infix version of this
+-- function is @('Data.Lens.Minimal.<~')@, which is usually more useful. This function can be used
+-- when 'Lens' is not a 'PureLens' and so the monadic type @m@ of the 'Lens' may not be
+-- 'Control.Monad.Identity.Identity'.
+--
+-- Notice that the type signature of this function is defined such that multiple 'update' functions
 -- can be composed using the 'Control.Monad.>>=' operator, for example:
 --
 -- @
@@ -324,28 +396,22 @@ lensGet lens = get >>= fetch lens
 update :: Monad m => Lens m c e -> e -> c -> m c
 update (Lens lens) o = execStateT (lens $ Just $ const $ return o)
 
--- | Similar to 'fetch', but performs the update purely, without Monadic side-effects.
+-- | Similar to 'update', but performs the update purely, without Monadic side-effects. It is
+-- usually easier to use the infix operator version of this function: @('Data.Lens.Minimal.<~')@.
 pureUpdate :: PureLens c e -> e -> c -> c
 pureUpdate lens o = runIdentity . update lens o
 
--- | Defined as
---
--- @
--- (\lens elem -> 'Control.Monad.State.Class.get' >>= 'update' lens elem >>= \e -> 'Control.Monad.State.Class.put' e >> return e)
--- @
-lensPut :: (Monad m, MonadState c m) => Lens m c e -> e -> m e
-lensPut lens e = get >>= update lens e >>= \c -> put c >> return e
-
--- | Uses 'fetch' to take an element @e@ from the container @c@, modifies the element @e@ using the
--- given function, then puts the element @e@ back into the container @c@ using 'update'.
+-- | Like 'update', but also returns the value @e@ that was changed along with the updated container
+-- @c@. The altering function must be a monadic function. For example:
 alter :: Monad m => Lens m c e -> (e -> m e) -> c -> m (e, c)
 alter (Lens lens) f = runStateT (lens $ Just f)
 
--- | Similar to 'alter' but requires a 'PureLens' and performs an update with a pure function.
+-- | Similar to 'alter' but requires a 'PureLens' and performs an update with a pure function. It
+-- is usually easier to use the infix operator version of this function: @('Data.Lens.Minimal.$=')@.
 pureAlter :: PureLens c e -> (e -> e) -> c -> (e, c)
 pureAlter lens f = runIdentity . alter lens (return . f)
 
--- | Defined as @(\lens f -> 'Control.Monad.State.Class.get' >>= 'alter' lens f >>= 'Control.Monad.State.Class.state' . 'Prelude.const')@.
+-- | Defined as @(\\lens f -> 'Control.Monad.State.Class.get' >>= 'alter' lens f >>= 'Control.Monad.State.Class.state' . 'Prelude.const')@.
 lensModify :: (Monad m, MonadState c m) => Lens m c e -> (e -> m e) -> m (e, c)
 lensModify lens f = get >>= alter lens f >>= \ (e, c) -> put c >> return (e, c)
 
