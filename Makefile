@@ -27,7 +27,7 @@ $(LIBRARY): $(CABAL_FILE) $(SOURCES)
 	cabal build 2>&1 | $(FILTER)
 
 install: $(LIBRARY)
-	cabal install | $(FILTER)
+	cabal install --force-reinstalls | $(FILTER)
 
 clean:
 	rm -Rf dist
