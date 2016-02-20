@@ -1,5 +1,5 @@
 name:     minilens
-version:  1.0.0.0
+version:  1.0.0.1
 synopsis: A minimalistic lens library, providing only the simplest, most basic lens functionality.
 description:         
     .
@@ -8,12 +8,13 @@ description:
     way. This library provides the simplest possible data types satisfying
     these properties.
     .
-    "minilens" type aims to provide a very simple improvement on Haskell's
-    record syntax: the idea of composable record accessors called 'Lens'es.
+    The "minilens" package aims to provide a very simple improvement on
+    Haskell's record syntax: the idea of composable record accessors
+    called 'Lens'es.
     .
     As of yet, there are no fancy Template Haskell APIs for generating lenses
     programmatically; you are expected to write your lenses by hand. Some handy
-    helper functions are provided to help you do this.
+    handy combinator functions are provided to help you do this.
     .
     This library was originally part of the Dao package, but has been branched
     into it's own package in the hopes that it will be useful in a wider
@@ -24,7 +25,7 @@ license:             GPL-3
 license-file:        LICENSE
 author:              Ramin Honary
 maintainer:          ramin.honary@gmail.com
-copyright:           2008-2015 Ramin Honary
+copyright:           2008-2016 Ramin Honary
 category:            Data, Lens
 build-type:          Simple
 cabal-version:       >=1.10

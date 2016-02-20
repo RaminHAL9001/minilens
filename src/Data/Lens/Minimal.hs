@@ -60,7 +60,7 @@
 -- @
 --
 -- Fetching values is done with @('Data.Lens.Minimal.Lens.~>')@, which is a left-handed infix operator of
--- precedence 1 so that you can compose 'Lens'es for fetching. The above example with @record@ and
+-- precedence 9 so that you can compose 'Lens'es for fetching. The above example with @record@ and
 -- @subRecord@ could be fetched like so:
 --
 -- @
@@ -188,8 +188,8 @@ import           Data.Word
 -- 
 -- @
 -- containerFirst :: 'Control.Monad.Monad' m => 'Lens' m (Container e) e
--- containerFirst = Lens (         \ (Container e0 e1) -> e0
---                       , \updateE0 (Container e0 e1) -> do
+-- containerFirst = Lens (         \\ (Container e0 e1) -> e0
+--                       , \\updateE0 (Container e0 e1) -> do
 --                           newE0 <- updateE0 e0
 --                           return (Container e0 newE0) -- NO! This is illegal.
 --                       )
@@ -285,11 +285,11 @@ liftLens (Lens (fetch, alter)) = Lens
 -- 'Control.Monad.return' 'Prelude.True':
 --
 -- @
--- example :: forall m a b . 'Control.Monad.Monad' m => 'Iso' m a b -> m Bool
--- example iso a0 = do
---     b  <- 'un''   iso a0
---     a1 <- 'make'' iso b
---     return (a0 == a1) -- *must* be True, by law
+-- example :: forall m whole parts . 'Control.Monad.Monad' m => 'Iso' m whole parts -> whole -> m Bool
+-- example iso whole0 = do
+--     parts  <- 'un''   iso whole0
+--     whole1 <- 'make'' iso parts
+--     return (whole0 == whole1) -- *must* be True, by law
 -- @
 -- 
 -- When creating an 'Iso'-morphism for @newtype@s, the convetion established by this module is that
@@ -363,20 +363,20 @@ type PureTwoWay whole parts = TwoWay Identity whole parts
 class TwoWayClass twoWay where
   isoKleisli :: (Monad m, Monad mm) => Iso m (twoWay mm whole parts) (Kleisli mm whole parts, Kleisli mm parts whole)
 
-instance TwoWayClass Iso    where { isoKleisli = newIso (\ (Iso    o) -> o, Iso   ); }
-instance TwoWayClass TwoWay where { isoKleisli = newIso (\ (TwoWay o) -> o, TwoWay); }
+instance TwoWayClass Iso    where { isoKleisli = Iso (Kleisli $ \ (Iso    o) -> return o, Kleisli $ return . Iso   ); }
+instance TwoWayClass TwoWay where { isoKleisli = Iso (Kleisli $ \ (TwoWay o) -> return o, Kleisli $ return . TwoWay); }
 
 -- | Construct a 'TwoWay' function or 'Iso'-morphism, or any 'TwoWayClass' of function, from a pair
 -- of monadic functions. It is a good idea to only use this when declaring a top-level function,
 -- where you provide an explicit type signature for the 'TwoWayClass'.
 new2way' :: (TwoWayClass iso, Monad m) => (whole -> m parts, parts -> m whole) -> iso m whole parts
-new2way' (fwd, rev) = make isoKleisli (Kleisli fwd, Kleisli rev)
+new2way' (fwd, rev) = (\ (Iso (_, make)) -> runIdentity $ runKleisli make (Kleisli fwd, Kleisli rev)) isoKleisli
 
 -- | Construct a 'TwoWay' function or 'Iso'-morphism, or any 'TwoWayClass' of function, from a pair
 -- of pure functions. It is a good idea to only use this when declaring a top-level function, where
 -- you provide an explicit type signature for the 'TwoWayClass'.
 new2way :: (TwoWayClass iso, Monad m) => (whole -> parts, parts -> whole) -> iso m whole parts
-new2way (fwd, rev) = make isoKleisli (arr fwd, arr rev)
+new2way (fwd, rev) = new2way' (return . fwd, return . rev)
 
 -- | Like 'new2way\'' but make it explicitly an 'Iso'-morphic function. This function is just a
 -- convenience so you do not have to provide an explicit type signature.
@@ -395,11 +395,11 @@ isoTo2way (Iso o) = TwoWay o
 
 -- | Extract the 'un' 'Control.Arrow.Kleisli' 'Control.Arrow.Arrow' from the 'Iso'-morphism.
 unK :: (TwoWayClass iso, Monad m) => iso m whole parts -> Kleisli m whole parts
-unK = fst . un isoKleisli
+unK iso = (\ (Iso (un, _)) -> fst $ runIdentity $ runKleisli un iso) isoKleisli
 
 -- | Extract the 'make' 'Control.Arrow.Kleisli' 'Control.Arrow.Arrow' from the 'Iso'-morphism.
 makeK :: (TwoWayClass iso, Monad m) => iso m whole parts -> Kleisli m parts whole
-makeK = snd . un isoKleisli
+makeK iso = (\ (Iso (un, _)) -> snd $ runIdentity $ runKleisli un iso) isoKleisli
 
 -- | An 'Iso'-morphism that takes a type @whole@ and @un@-makes it, turning the @whole@ into the
 -- @parts@.
@@ -708,9 +708,7 @@ apZipList = newIso (getZipList, ZipList)
 
 ----------------------------------------------------------------------------------------------------
 
--- | This is defined as @('Prelude.flip' 'pureFetch')@ a left-associative infix operator of
--- precedence 8. On the right of this infix operator is the data from which you want to fetch, on
--- the right is a 'Lens' used to retrieve the data from within it. For example, the expression:
+-- | The expression:
 --
 -- @
 -- someContainer 'Data.Lens.Minilens.~>' getElem
@@ -720,8 +718,9 @@ apZipList = newIso (getZipList, ZipList)
 -- @someContainer@.
 --
 -- It looks and behaves similar to the C/C++ programming language operator @->@. It is left
--- associative so the expression @a~>b~>c~>d@ is the same as @((a ~> b) ~> c) ~> d@, which means you
--- can use this operator to compose 'Lens'es to retrieve elements at arbitrary depth.
+-- associative (precedence 9) so the expression @a~>b~>c~>d@ is the same as @((a ~> b) ~> c) ~> d@,
+-- which means you can use this operator to compose 'Lens'es to retrieve elements at arbitrary
+-- depth.
 --
 -- This function requires a 'PureLens', but of course any 'Lens' polymorphic over the monadic type
 -- @m@ can be used, automatic type inference will choose to make use of
